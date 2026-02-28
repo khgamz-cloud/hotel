@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body p-4">
+        <h1 class="h3">Номер {{ room.number }}</h1>
+        <p class="text-muted">{{ room.category.name }} · Этаж {{ room.floor }}</p>
+        <ul class="list-group list-group-flush mb-3">
+          <li class="list-group-item">Вместимость: {{ room.capacity }} чел.</li>
+          <li class="list-group-item">Стоимость: {{ '%.0f'|format(room.price) }} ₽ / ночь</li>
+          <li class="list-group-item">Правила: {{ room.category.rules or 'Стандартные правила размещения' }}</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-7">
+    <div class="card shadow-sm border-0 rounded-4">
+      <div class="card-body p-4">
+        <h2 class="h4 mb-3">Оформление бронирования</h2>
+        <form method="post" class="row g-3">
+          <div class="col-md-6"><label class="form-label">ФИО гостя</label><input class="form-control" name="guest_name" required></div>
+          <div class="col-md-6"><label class="form-label">Email</label><input class="form-control" name="guest_email" type="email" required></div>
+          <div class="col-md-6"><label class="form-label">Дата заезда</label><input class="form-control" name="check_in" type="date" required></div>
+          <div class="col-md-6"><label class="form-label">Дата выезда</label><input class="form-control" name="check_out" type="date" required></div>
+          <div class="col-md-6"><label class="form-label">Способ оплаты</label>
+            <select class="form-select" name="payment_method">
+              <option value="card">Банковская карта</option>
+              <option value="cash">Наличными</option>
+              <option value="invoice">Безналичный расчёт</option>
+            </select>
+          </div>
+          <div class="col-12"><button class="btn btn-primary">Подтвердить бронь</button></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

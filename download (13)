@@ -1,0 +1,45 @@
+from datetime import datetime
+from .extensions import db
+from .models import Booking, AuditLog, Room
+
+
+def calculate_booking_total(room: Room, check_in, check_out) -> float:
+    nights = max((check_out - check_in).days, 1)
+    return round(room.price * nights, 2)
+
+
+def room_is_available(room: Room, check_in, check_out) -> bool:
+    for booking in room.bookings:
+        if booking.overlaps(check_in, check_out):
+            return False
+    return True
+
+
+def create_booking(*, guest_name: str, guest_email: str, room: Room, check_in, check_out, payment_method: str, manager_id=None):
+    if check_in >= check_out:
+        raise ValueError("Дата выезда должна быть позже даты заезда.")
+    if not room_is_available(room, check_in, check_out):
+        raise ValueError("Номер уже забронирован на выбранные даты.")
+
+    booking = Booking(
+        guest_name=guest_name,
+        guest_email=guest_email,
+        check_in=check_in,
+        check_out=check_out,
+        total_amount=calculate_booking_total(room, check_in, check_out),
+        status="confirmed",
+        payment_method=payment_method,
+        room=room,
+        manager_id=manager_id,
+    )
+    db.session.add(booking)
+    return booking
+
+
+def log_action(actor_email: str, action: str, object_type: str, object_id=None):
+    db.session.add(AuditLog(
+        actor_email=actor_email,
+        action=action,
+        object_type=object_type,
+        object_id=str(object_id) if object_id is not None else None,
+    ))

@@ -1,0 +1,9 @@
+body { background: #f4f7fb; }
+.hero-card {
+  background: linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%);
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
+}
+.card { border-radius: 1.25rem; }
+.table > :not(caption) > * > * { padding: .9rem .8rem; }
+.admin-menu .list-group-item { border: 0; border-radius: .8rem; margin-bottom: .35rem; }
+.admin-menu .list-group-item:hover { background: #eff6ff; }

@@ -1,0 +1,17 @@
+{% extends 'admin/base.html' %}
+{% block admin_content %}
+<h1 class="h3 mb-3">Номера</h1>
+<div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="table-responsive">
+<table class="table align-middle">
+  <thead><tr><th>№</th><th>Категория</th><th>Этаж</th><th>Вместимость</th><th>Цена</th><th>Статус</th></tr></thead>
+  <tbody>
+  {% for room in items %}
+    <tr>
+      <td>{{ room.number }}</td><td>{{ room.category.name }}</td><td>{{ room.floor }}</td><td>{{ room.capacity }}</td><td>{{ room.price }} ₽</td>
+      <td>{% if room.is_available %}<span class="badge bg-success">Доступен</span>{% else %}<span class="badge bg-danger">Недоступен</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div></div>
+{% endblock %}

@@ -1,0 +1,38 @@
+from datetime import datetime
+from flask import Blueprint, render_template, request, redirect, url_for, flash
+from ..extensions import db
+from ..models import Room
+from ..services import create_booking
+
+
+public_bp = Blueprint("public", __name__)
+
+
+@public_bp.route("/")
+def index():
+    rooms = Room.query.filter_by(is_available=True).order_by(Room.price.asc()).all()
+    return render_template("public/index.html", rooms=rooms)
+
+
+@public_bp.route("/rooms/<int:room_id>", methods=["GET", "POST"])
+def room_detail(room_id):
+    room = Room.query.get_or_404(room_id)
+    if request.method == "POST":
+        try:
+            check_in = datetime.strptime(request.form["check_in"], "%Y-%m-%d").date()
+            check_out = datetime.strptime(request.form["check_out"], "%Y-%m-%d").date()
+            booking = create_booking(
+                guest_name=request.form["guest_name"].strip(),
+                guest_email=request.form["guest_email"].strip(),
+                room=room,
+                check_in=check_in,
+                check_out=check_out,
+                payment_method=request.form.get("payment_method", "card"),
+            )
+            db.session.commit()
+            flash(f"Бронирование №{booking.id} успешно создано.", "success")
+            return redirect(url_for("public.index"))
+        except Exception as exc:
+            db.session.rollback()
+            flash(str(exc), "danger")
+    return render_template("public/room_detail.html", room=room)

@@ -1,0 +1,93 @@
+import os
+import shutil
+from pathlib import Path
+import click
+from flask import Flask, render_template
+from .extensions import db, login_manager, migrate
+from .seed import ensure_admin, seed_all
+from config import Config
+
+
+def create_app(config_object=Config):
+    app = Flask(__name__, instance_relative_config=True)
+    app.config.from_object(config_object)
+    os.makedirs(app.instance_path, exist_ok=True)
+    os.makedirs(app.config["BACKUP_DIR"], exist_ok=True)
+
+    db.init_app(app)
+    login_manager.init_app(app)
+    migrate.init_app(app, db)
+    login_manager.login_view = "auth.login"
+    login_manager.login_message = "Войдите для доступа к панели администратора."
+
+    from .auth.routes import auth_bp
+    from .public.routes import public_bp
+    from .admin.routes import admin_bp
+
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(public_bp)
+    app.register_blueprint(admin_bp)
+
+    register_cli(app)
+
+    @app.errorhandler(403)
+    def forbidden(_e):
+        return render_template("403.html"), 403
+
+    @app.errorhandler(404)
+    def not_found(_e):
+        return render_template("404.html"), 404
+
+    @app.context_processor
+    def inject_globals():
+        return {"app_name": app.config.get("APP_NAME", "Hotel Flask UI")}
+
+    with app.app_context():
+        db.create_all()
+        seed_all()
+
+    return app
+
+
+def register_cli(app: Flask):
+    @app.cli.command("create-admin")
+    @click.option("--email", required=True)
+    @click.option("--password", required=False, default="admin123")
+    @click.option("--name", required=False, default="Системный администратор")
+    def create_admin(email, password, name):
+        user = ensure_admin(email=email, password=password, full_name=name)
+        click.echo(f"Администратор создан: {user.email}")
+
+    @app.cli.command("seed")
+    def seed_command():
+        seed_all()
+        click.echo("Демо-данные добавлены.")
+
+    @app.cli.command("db-backup")
+    def db_backup():
+        uri = app.config["SQLALCHEMY_DATABASE_URI"]
+        if not uri.startswith("sqlite:///"):
+            raise click.ClickException("Команда поддерживает только SQLite для демо-проекта.")
+        db_path = uri.replace("sqlite:///", "")
+        src = Path(db_path)
+        if not src.exists():
+            raise click.ClickException(f"Файл БД не найден: {src}")
+        target = Path(app.config["BACKUP_DIR"]) / f"backup_{click.utils.format_filename(src.stem)}_{Path().cwd().name}.sqlite3"
+        # cleaner timestamp name
+        from datetime import datetime
+        target = Path(app.config["BACKUP_DIR"]) / f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sqlite3"
+        shutil.copy2(src, target)
+        click.echo(f"Резервная копия создана: {target}")
+
+    @app.cli.command("db-restore")
+    @click.option("--file", "file_path", required=True)
+    def db_restore(file_path):
+        uri = app.config["SQLALCHEMY_DATABASE_URI"]
+        if not uri.startswith("sqlite:///"):
+            raise click.ClickException("Команда поддерживает только SQLite для демо-проекта.")
+        src = Path(file_path)
+        if not src.exists():
+            raise click.ClickException(f"Файл не найден: {src}")
+        db_path = Path(uri.replace("sqlite:///", ""))
+        shutil.copy2(src, db_path)
+        click.echo(f"База восстановлена из: {src}")

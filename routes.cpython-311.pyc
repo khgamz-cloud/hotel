@@ -1,0 +1,156 @@
+from pathlib import Path
+from flask import Blueprint, render_template, request, redirect, url_for, flash, Response, current_app
+from flask_login import login_required, current_user
+from sqlalchemy import func
+from ..extensions import db
+from ..models import RoomCategory, Room, Service, User, Role, Booking
+from ..permissions import require_perm
+from ..reports import booking_summary, bookings_csv
+from ..services import log_action
+
+
+admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+@admin_bp.route("/")
+@login_required
+@require_perm("admin.dashboard.view")
+def dashboard():
+    stats = booking_summary(db)
+    return render_template("admin/dashboard.html", stats=stats)
+
+
+@admin_bp.route("/categories", methods=["GET", "POST"])
+@login_required
+@require_perm("admin.categories.view")
+def categories():
+    if request.method == "POST" and current_user.has_permission("admin.categories.edit"):
+        name = request.form.get("name", "").strip()
+        category_id = request.form.get("category_id")
+        category = RoomCategory.query.get(category_id) if category_id else RoomCategory()
+        category.name = name
+        category.capacity = int(request.form.get("capacity", 1))
+        category.base_price = float(request.form.get("base_price", 0))
+        category.description = request.form.get("description", "").strip()
+        category.rules = request.form.get("rules", "").strip()
+        category.is_active = request.form.get("is_active") == "on"
+        db.session.add(category)
+        db.session.commit()
+        log_action(current_user.email, "save", "RoomCategory", category.id)
+        db.session.commit()
+        flash("Категория сохранена.", "success")
+        return redirect(url_for("admin.categories"))
+    q = request.args.get("q", "").strip()
+    active = request.args.get("active", "")
+    query = RoomCategory.query
+    if q:
+        query = query.filter(RoomCategory.name.ilike(f"%{q}%"))
+    if active in {"0", "1"}:
+        query = query.filter(RoomCategory.is_active == (active == "1"))
+    items = query.order_by(RoomCategory.name.asc()).all()
+    edit_item = RoomCategory.query.get(request.args.get("edit")) if request.args.get("edit") else None
+    return render_template("admin/categories.html", items=items, edit_item=edit_item)
+
+
+@admin_bp.route("/categories/<int:item_id>/archive")
+@login_required
+@require_perm("admin.categories.edit")
+def archive_category(item_id):
+    item = RoomCategory.query.get_or_404(item_id)
+    item.is_active = False
+    db.session.commit()
+    flash("Категория отправлена в архив.", "warning")
+    return redirect(url_for("admin.categories"))
+
+
+@admin_bp.route("/rooms")
+@login_required
+@require_perm("admin.rooms.view")
+def rooms():
+    items = Room.query.order_by(Room.number.asc()).all()
+    return render_template("admin/rooms.html", items=items)
+
+
+@admin_bp.route("/services", methods=["GET", "POST"])
+@login_required
+@require_perm("admin.services.view")
+def services():
+    if request.method == "POST" and current_user.has_permission("admin.services.edit"):
+        service_id = request.form.get("service_id")
+        item = Service.query.get(service_id) if service_id else Service()
+        item.name = request.form.get("name", "").strip()
+        item.price = float(request.form.get("price", 0))
+        item.unit = request.form.get("unit", "услуга").strip()
+        item.description = request.form.get("description", "").strip()
+        item.is_active = request.form.get("is_active") == "on"
+        db.session.add(item)
+        db.session.commit()
+        flash("Услуга сохранена.", "success")
+        return redirect(url_for("admin.services"))
+    edit_item = Service.query.get(request.args.get("edit")) if request.args.get("edit") else None
+    items = Service.query.order_by(Service.name.asc()).all()
+    return render_template("admin/services.html", items=items, edit_item=edit_item)
+
+
+@admin_bp.route("/users", methods=["GET", "POST"])
+@login_required
+@require_perm("admin.users.view")
+def users():
+    roles = Role.query.order_by(Role.name.asc()).all()
+    if request.method == "POST" and current_user.has_permission("admin.users.edit"):
+        user_id = request.form.get("user_id")
+        item = User.query.get(user_id) if user_id else User(password_hash="")
+        item.full_name = request.form.get("full_name", "").strip()
+        item.email = request.form.get("email", "").strip().lower()
+        item.role_id = int(request.form.get("role_id"))
+        item.is_active_user = request.form.get("is_active") == "on"
+        password = request.form.get("password", "")
+        if password:
+            item.set_password(password)
+        elif not item.id:
+            item.set_password("user12345")
+        db.session.add(item)
+        db.session.commit()
+        flash("Пользователь сохранён.", "success")
+        return redirect(url_for("admin.users"))
+    items = User.query.order_by(User.created_at.desc()).all()
+    edit_item = User.query.get(request.args.get("edit")) if request.args.get("edit") else None
+    return render_template("admin/users.html", items=items, roles=roles, edit_item=edit_item)
+
+
+@admin_bp.route("/reports")
+@login_required
+@require_perm("admin.reports.view")
+def reports():
+    stats = booking_summary(db)
+    recent = Booking.query.order_by(Booking.created_at.desc()).limit(10).all()
+    return render_template("admin/reports.html", stats=stats, recent=recent)
+
+
+@admin_bp.route("/reports/export.csv")
+@login_required
+@require_perm("admin.reports.view")
+def reports_export():
+    bookings = Booking.query.order_by(Booking.id.desc()).all()
+    payload = bookings_csv(bookings)
+    return Response(
+        payload,
+        mimetype="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=bookings_report.csv"},
+    )
+
+
+@admin_bp.route("/database")
+@login_required
+@require_perm("admin.dashboard.view")
+def database_tools():
+    backup_dir = Path(current_app.config["BACKUP_DIR"])
+    files = sorted(backup_dir.glob("*"), reverse=True)
+    integrity = {
+        "categories": RoomCategory.query.count(),
+        "rooms": Room.query.count(),
+        "bookings": Booking.query.count(),
+        "users": User.query.count(),
+        "duplicates": db.session.query(Room.number, func.count(Room.id)).group_by(Room.number).having(func.count(Room.id) > 1).count(),
+    }
+    return render_template("admin/database.html", files=files, integrity=integrity)

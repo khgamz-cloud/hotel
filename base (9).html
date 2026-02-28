@@ -1,0 +1,13 @@
+{% extends 'admin/base.html' %}
+{% block admin_content %}
+<h1 class="h3 mb-4">Панель управления</h1>
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-muted">Бронирований</div><div class="fs-3 fw-bold">{{ stats.total_bookings }}</div></div></div></div>
+  <div class="col-md-3"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-muted">Выручка</div><div class="fs-3 fw-bold">{{ stats.total_revenue }} ₽</div></div></div></div>
+  <div class="col-md-3"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-muted">Отмены</div><div class="fs-3 fw-bold">{{ stats.cancelled }}</div></div></div></div>
+  <div class="col-md-3"><div class="card border-0 shadow-sm rounded-4"><div class="card-body"><div class="text-muted">Топ категория</div><div class="fs-5 fw-bold">{{ stats.top_category }}</div></div></div></div>
+</div>
+<div class="card border-0 shadow-sm rounded-4"><div class="card-body">
+  <p class="mb-0">В панели доступны управление категориями номеров, услугами, пользователями, отчётами и инструментами резервного копирования.</p>
+</div></div>
+{% endblock %}
